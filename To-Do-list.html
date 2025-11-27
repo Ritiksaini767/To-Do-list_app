@@ -82,37 +82,44 @@
         let db;
         let auth;
         let userId = null;
-        const tasksCollectionName = 'todos'; // The name of your collection
+        const tasksCollectionName = 'todos'; 
         
-        // Retrieve and parse mandatory global configuration variables
+        // Configuration variables provided by the Canvas environment (used if defined)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        let firebaseConfig;
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const canvasFirebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
 
-        // --- Fix for "projectId not provided" and "api-key-not-valid" errors when running locally ---
-        try {
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                firebaseConfig = JSON.parse(__firebase_config);
-            } else {
-                // Fallback: Provide a valid structure with a fake project ID 
-                // We use a mock API key to signal "MOCK MODE" in the initialization function.
-                firebaseConfig = {
-                    apiKey: "mock-api-key", 
-                    authDomain: "mock-project.firebaseapp.com",
-                    projectId: "mock-project-id", 
-                    storageBucket: "mock-project.appspot.com",
-                    messagingSenderId: "0000000000",
-                    appId: "1:0000000000:web:mockid"
-                };
-                console.warn("WARN: Using mock Firebase config. Data will only persist when run in the Canvas environment.");
-            }
-        } catch (e) {
-            console.error("Error parsing __firebase_config. Using mock config.", e);
-            // Ensure config is still available even if parsing fails
-            firebaseConfig = { apiKey: "mock-api-key" };
+
+        // =========================================================================
+        // !!! CRITICAL DEPLOYMENT FIX: REAL FIREBASE CONFIGURATION !!!
+        // This configuration is used when the app is deployed to GitHub Pages.
+        // =========================================================================
+
+        const GITHUB_PAGES_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyBuSLhsh_dc0e3ZsSxmTJzSyKsSm26IJ-M", 
+            authDomain: "to-do-list-da75a.firebaseapp.com",
+            projectId: "to-do-list-da75a", 
+            storageBucket: "to-do-list-da75a.firebasestorage.app",
+            messagingSenderId: "240094222292",
+            appId: "1:240094222292:web:3c9a6fecb48ed5949a2841"
+        };
+
+        // Determine which config to use: Canvas environment (if available) or Hardcoded GitHub Pages config
+        let firebaseConfig = canvasFirebaseConfig || GITHUB_PAGES_FIREBASE_CONFIG;
+        
+        // This check ensures we still catch the mock mode if the keys were somehow missed
+        if (!firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("YOUR_") || firebaseConfig.apiKey.startsWith("mock-")) {
+             console.warn("MOCK MODE WARNING: Configuration keys are missing, using mock/placeholder. Data will not persist outside of Canvas or until deployed with fixed keys.");
+             // If canvas config isn't available and we still have bad keys, switch to explicit mock mode
+             if (!canvasFirebaseConfig && firebaseConfig.apiKey !== GITHUB_PAGES_FIREBASE_CONFIG.apiKey) {
+                 firebaseConfig = { apiKey: "mock-api-key" };
+             }
         }
-        // --- End of Fix ---
+
+        // =========================================================================
+        // !!! END CRITICAL DEPLOYMENT FIX !!!
+        // =========================================================================
+
 
         const taskInput = document.getElementById('taskInput');
         const addTaskBtn = document.getElementById('addTaskBtn');
@@ -140,23 +147,31 @@
                     console.warn("MOCK MODE: Skipping Firebase Auth/Firestore calls to prevent API key errors during local testing.");
                     userId = 'MOCK_USER_ID_FOR_LOCAL_TESTING';
                     userIdDisplay.textContent = userId;
-                    // Manually clear loading indicator and show success message
-                    taskList.innerHTML = '<p class="text-center text-gray-500 py-4">UI Loaded Successfully (Mock Mode). Deploy to GitHub Pages for real functionality.</p>';
+                    loadingIndicator.style.display = 'none'; // Hide loading indicator in mock mode
+                    taskList.innerHTML = '<p class="text-center text-gray-500 py-4">UI Loaded Successfully (Mock Mode). Please deploy the configured file to GitHub to enable real-time features.</p>';
                     statusMessage.textContent = 'Local UI test successful. Real-time data is disabled.';
                     return; // Exit, skipping all real database connections
                 }
                 
-                // Initialize Firebase App
+                // --- REAL DEPLOYMENT LOGIC STARTS HERE ---
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-
-                // Handle Authentication: Use custom token if available, otherwise sign in anonymously
+                
+                let signedIn = false;
+                
+                // 1. Try to sign in with the canvas token if available (for Canvas environment)
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
-                } else {
+                    signedIn = true;
+                }
+                
+                // 2. If no canvas token, sign in anonymously (for GitHub Pages)
+                if (!signedIn) {
+                    // Sign in anonymously will create a unique, persistent user ID for the browser
                     await signInAnonymously(auth);
                 }
+
 
                 // Set up listener for auth state changes
                 onAuthStateChanged(auth, (user) => {
@@ -174,7 +189,7 @@
 
             } catch (error) {
                 console.error("Firebase Initialization Error:", error);
-                statusMessage.textContent = `Error initializing app: ${error.message}`;
+                statusMessage.textContent = `Error initializing app: ${error.message}. Check your console for details (often a configuration issue).`;
                 userIdDisplay.textContent = 'Initialization Failed';
             }
         }
@@ -266,14 +281,16 @@
                 return;
             }
 
-            if (!db || !userId) return;
+            if (!db || !userId) {
+                 statusMessage.textContent = "Error: Authentication required to add tasks.";
+                 return;
+            }
 
             try {
                 const newTask = {
                     text: text.trim(),
                     completed: false,
                     createdAt: Date.now(),
-                    // Optional: You can store the creator's ID for private apps
                     // creatorId: userId 
                 };
 
