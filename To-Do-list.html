@@ -72,7 +72,8 @@
     <script type="module">
         // --- 1. FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // NOTE: We do not need signInWithCustomToken or signInAnonymously if we use the real config
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Set log level to Debug for visibility
@@ -91,11 +92,13 @@
 
 
         // =========================================================================
-        // !!! CRITICAL DEPLOYMENT FIX: REAL FIREBASE CONFIGURATION !!!
-        // This configuration is used when the app is deployed to GitHub Pages.
+        // !!! CRITICAL DEPLOYMENT FIX !!!
+        // When deploying to GitHub Pages, the environment variables are UNDEFINED.
+        // We must provide the real Firebase configuration here for the app to work.
         // =========================================================================
 
         const GITHUB_PAGES_FIREBASE_CONFIG = {
+            // REPLACE all the placeholder values below with your actual Firebase Web App config
             apiKey: "AIzaSyBuSLhsh_dc0e3ZsSxmTJzSyKsSm26IJ-M", 
             authDomain: "to-do-list-da75a.firebaseapp.com",
             projectId: "to-do-list-da75a", 
@@ -107,13 +110,11 @@
         // Determine which config to use: Canvas environment (if available) or Hardcoded GitHub Pages config
         let firebaseConfig = canvasFirebaseConfig || GITHUB_PAGES_FIREBASE_CONFIG;
         
-        // This check ensures we still catch the mock mode if the keys were somehow missed
-        if (!firebaseConfig.apiKey || firebaseConfig.apiKey.startsWith("YOUR_") || firebaseConfig.apiKey.startsWith("mock-")) {
-             console.warn("MOCK MODE WARNING: Configuration keys are missing, using mock/placeholder. Data will not persist outside of Canvas or until deployed with fixed keys.");
-             // If canvas config isn't available and we still have bad keys, switch to explicit mock mode
-             if (!canvasFirebaseConfig && firebaseConfig.apiKey !== GITHUB_PAGES_FIREBASE_CONFIG.apiKey) {
-                 firebaseConfig = { apiKey: "mock-api-key" };
-             }
+        // Check if the hardcoded configuration is still using placeholders
+        if (firebaseConfig.apiKey.startsWith("YOUR_")) {
+             console.error("DEPLOYMENT ERROR: Please replace the placeholder keys in GITHUB_PAGES_FIREBASE_CONFIG with your real Firebase keys.");
+             // Fallback to MOCK MODE if placeholders are still present for local testing
+             firebaseConfig = { apiKey: "mock-api-key" }; 
         }
 
         // =========================================================================
@@ -132,6 +133,8 @@
         // PUBLIC Path: /artifacts/{appId}/public/data/todos
         function getCollectionRef() {
             // We are storing public data accessible to anyone using this app
+            // NOTE: When deployed, this uses the projectId from the GITHUB_PAGES_FIREBASE_CONFIG
+            // and saves data under the 'default-app-id' (since __app_id is undefined).
             return collection(db, `artifacts/${appId}/public/data/${tasksCollectionName}`);
         }
 
@@ -142,13 +145,12 @@
          */
         async function initializeFirebaseAndAuth() {
             try {
-                // Check for mock key and enable local-only UI mode if detected
+                // Check for mock key (used only if placeholders were not replaced)
                 if (firebaseConfig.apiKey === "mock-api-key") {
-                    console.warn("MOCK MODE: Skipping Firebase Auth/Firestore calls to prevent API key errors during local testing.");
+                    console.warn("MOCK MODE: Skipping Firebase Auth/Firestore calls.");
                     userId = 'MOCK_USER_ID_FOR_LOCAL_TESTING';
                     userIdDisplay.textContent = userId;
-                    loadingIndicator.style.display = 'none'; // Hide loading indicator in mock mode
-                    taskList.innerHTML = '<p class="text-center text-gray-500 py-4">UI Loaded Successfully (Mock Mode). Please deploy the configured file to GitHub to enable real-time features.</p>';
+                    taskList.innerHTML = '<p class="text-center text-gray-500 py-4">UI Loaded Successfully (Mock Mode). Please replace the placeholder keys in the code to enable real-time features.</p>';
                     statusMessage.textContent = 'Local UI test successful. Real-time data is disabled.';
                     return; // Exit, skipping all real database connections
                 }
@@ -168,7 +170,6 @@
                 
                 // 2. If no canvas token, sign in anonymously (for GitHub Pages)
                 if (!signedIn) {
-                    // Sign in anonymously will create a unique, persistent user ID for the browser
                     await signInAnonymously(auth);
                 }
 
@@ -275,12 +276,7 @@
          * Adds a new task to Firestore.
          */
         async function addTask(text) {
-            // Check for mock mode and prevent data operations
-            if (firebaseConfig.apiKey === "mock-api-key") {
-                statusMessage.textContent = "Error: Cannot add tasks in local MOCK MODE. Deploy the app to enable real-time features.";
-                return;
-            }
-
+            // No need to check for mock mode here, the initialization handles it
             if (!db || !userId) {
                  statusMessage.textContent = "Error: Authentication required to add tasks.";
                  return;
@@ -307,12 +303,7 @@
          * Toggles the 'completed' status of a task in Firestore.
          */
         async function toggleTaskStatus(taskId, isCompleted) {
-            // Check for mock mode and prevent data operations
-            if (firebaseConfig.apiKey === "mock-api-key") {
-                statusMessage.textContent = "Error: Cannot modify tasks in local MOCK MODE. Deploy the app to enable real-time features.";
-                return;
-            }
-
+            // No need to check for mock mode here, the initialization handles it
             if (!db) return;
             
             try {
@@ -331,12 +322,7 @@
          * Deletes a task from Firestore.
          */
         async function deleteTask(taskId) {
-            // Check for mock mode and prevent data operations
-            if (firebaseConfig.apiKey === "mock-api-key") {
-                statusMessage.textContent = "Error: Cannot delete tasks in local MOCK MODE. Deploy the app to enable real-time features.";
-                return;
-            }
-
+            // No need to check for mock mode here, the initialization handles it
             if (!db) return;
             
             try {
