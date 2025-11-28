@@ -72,8 +72,8 @@
     <script type="module">
         // --- 1. FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        // NOTE: We do not need signInWithCustomToken or signInAnonymously if we use the real config
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // NOTE: Corrected imports to include necessary sign-in methods
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Set log level to Debug for visibility
@@ -164,12 +164,14 @@
                 
                 // 1. Try to sign in with the canvas token if available (for Canvas environment)
                 if (initialAuthToken) {
+                    // signInWithCustomToken is now imported
                     await signInWithCustomToken(auth, initialAuthToken);
                     signedIn = true;
                 }
                 
                 // 2. If no canvas token, sign in anonymously (for GitHub Pages)
                 if (!signedIn) {
+                    // signInAnonymously is now imported
                     await signInAnonymously(auth);
                 }
 
